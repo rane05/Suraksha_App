@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Police Crime Heatmap</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>
+        #map {
+            height: 600px !important;
+            width: 100% !important;
+            border-radius: 8px;
+            border: 2px solid #e5e7eb;
+            z-index: 1;
+        }
+        .leaflet-container {
+            height: 100%;
+            width: 100%;
+            background: #f8f9fa !important;
+        }
+        .leaflet-tile-pane {
+            z-index: 2;
+        }
+        .leaflet-objects-pane {
+            z-index: 3;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 p-5">
+    <h1 class="text-3xl font-bold text-center mb-6">🚔 Mark Crime Areas</h1>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-white p-4 rounded-lg shadow-lg">
+            <div id="map" class="w-full h-full rounded-lg"></div>
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow-lg">
+            <h2 class="text-lg font-semibold mb-3">Report Crime</h2>
+            <form id="crimeForm" class="space-y-4">
+                <label class="block">Crime Type:</label>
+                <select id="crimeType" class="border p-2 w-full rounded">
+                    <option value="violent">Violent Crime</option>
+                    <option value="property">Property Crime</option>
+                    <option value="vandalism">Vandalism</option>
+                    <option value="kidnapping">Kidnapping</option>
+                    <option value="carcrimes">Car Crimes</option>
+                </select>
+
+                <label class="block">Severity:</label>
+                <select id="severity" class="border p-2 w-full rounded">
+                    <option value="low">Low (🟢 Green)</option>
+                    <option value="medium">Medium (🟡 Yellow)</option>
+                    <option value="high">High (🔴 Red)</option>
+                </select>
+
+                <label class="block">Description:</label>
+                <textarea id="crimeDesc" class="border p-2 w-full rounded" required></textarea>
+
+                <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded w-full hover:bg-blue-600">Save Crime</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize map with explicit options
+            const map = L.map('map', {
+                center: [19.0760, 72.8777], // Mumbai coordinates
+                zoom: 12,
+                zoomControl: true,
+                attributionControl: true,
+                scrollWheelZoom: true
+            });
+
+            // Add tile layer immediately
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19,
+                tileSize: 512,
+                zoomOffset: -1
+            }).addTo(map);
+
+            // Force map to refresh after initialization
+            setTimeout(() => {
+                map.invalidateSize();
+            }, 100);
+
+            // Store markers
+            const markers = new Map();
+
+            let selectedLocation = null;  // Add this to store clicked location
+
+            // Update click handler
+            map.on('click', (e) => {
+                const { lat, lng } = e.latlng;
+                
+                // Remove existing temporary marker if any
+                if (selectedLocation) {
+                    map.removeLayer(selectedLocation);
+                }
+
+                // Add new temporary marker
+                selectedLocation = L.marker([lat, lng])
+                    .bindPopup('Click "Save Crime" to record this location')
+                    .addTo(map);
+            });
+
+            // Update form submission
+            document.getElementById('crimeForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                // Check if location is selected
+                if (!selectedLocation) {
+                    alert('Please click on the map to select a location first');
+                    return;
+                }
+
+                const location = selectedLocation.getLatLng();
+                const formData = {
+                    type: document.getElementById('crimeType').value,
+                    severity: document.getElementById('severity').value,
+                    description: document.getElementById('crimeDesc').value,
+                    lat: location.lat,
+                    lng: location.lng
+                };
+
+                try {
+                    const response = await fetch('/api/report-crime', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(formData)
+                    });
+
+                    if (response.ok) {
+                        // Replace temporary marker with permanent one
+                        map.removeLayer(selectedLocation);
+                        L.marker([formData.lat, formData.lng])
+                            .bindPopup(`
+                                <strong>${formData.type}</strong><br>
+                                Severity: ${formData.severity}<br>
+                                ${formData.description}
+                            `)
+                            .addTo(map);
+                        
+                        // Reset form and selected location
+                        document.getElementById('crimeForm').reset();
+                        selectedLocation = null;
+                        
+                        alert('Crime location saved successfully!');
+                    }
+                } catch (error) {
+                    console.error('Error saving crime data:', error);
+                    alert('Error saving crime data. Please try again.');
+                }
+            });
+
+            // Load existing markers
+            fetch('/api/markers')
+                .then(response => response.json())
+                .then(data => {
+                    data.forEach(markerData => {
+                        L.marker([markerData.lat, markerData.lng])
+                            .bindPopup(`
+                                <strong>${markerData.title}</strong><br>
+                                Priority: ${markerData.priority}
+                            `)
+                            .addTo(map);
+                    });
+                })
+                .catch(error => console.error('Error loading markers:', error));
+        });
+    </script>
+</body>
+</html>
