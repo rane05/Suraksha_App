@@ -8,6 +8,26 @@ Home - Citizen Safety App
       
         <div class="container mx-auto px-4 mt-20">
             <h2 class="text-2xl font-bold mb-4 dark:text-white">Offender Database</h2>
+            
+            <!-- Upload Criminal Form -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mb-6 border border-gray-200 dark:border-gray-700">
+                <h3 class="text-lg font-semibold mb-3 dark:text-white">Add New Criminal Profile</h3>
+                <form id="uploadCriminalForm" class="flex flex-col md:flex-row gap-4 items-end">
+                    <div class="flex-1">
+                        <label for="criminalName" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Criminal Name:</label>
+                        <input type="text" id="criminalName" required class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:text-white dark:border-gray-600">
+                    </div>
+                    <div class="flex-1">
+                        <label for="criminalPhoto" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Upload Photo:</label>
+                        <input type="file" id="criminalPhoto" accept="image/*" required class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:text-white dark:border-gray-600">
+                    </div>
+                    <button type="submit" class="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 transition-colors duration-200">
+                        Add to Database
+                    </button>
+                </form>
+                <div id="uploadStatus" class="mt-2 text-sm font-medium hidden"></div>
+            </div>
+
             <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
                 <div class="mb-4">
                     <label for="searchType" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Search by:</label>
@@ -79,7 +99,44 @@ Home - Citizen Safety App
         </div>
     </div>
 
-   
-    
+    <script>
+        document.getElementById('uploadCriminalForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('criminalName').value;
+            const photoInput = document.getElementById('criminalPhoto');
+            const statusDiv = document.getElementById('uploadStatus');
+
+            if (photoInput.files.length === 0) return;
+
+            const formData = new FormData();
+            formData.append('name', name);
+            formData.append('photo', photoInput.files[0]);
+
+            statusDiv.classList.remove('hidden', 'text-green-600', 'text-red-600');
+            statusDiv.classList.add('text-blue-600');
+            statusDiv.textContent = 'Uploading...';
+
+            try {
+                const response = await fetch('/police/upload-criminal', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                if (response.ok) {
+                    statusDiv.classList.remove('text-blue-600');
+                    statusDiv.classList.add('text-green-600');
+                    statusDiv.textContent = 'Success: ' + result.message;
+                    document.getElementById('uploadCriminalForm').reset();
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (err) {
+                statusDiv.classList.remove('text-blue-600');
+                statusDiv.classList.add('text-red-600');
+                statusDiv.textContent = 'Error: ' + err.message;
+            }
+        });
+    </script>
 {% endblock %}
 

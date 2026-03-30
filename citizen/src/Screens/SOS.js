@@ -46,9 +46,49 @@ const SOSScreen = () => {
     }, [locationSubscription]);
 
     const handleSosButtonClick = async () => {
-        if (!location || sosActivated) {
-            Alert.alert('Error', 'SOS already active or cannot get your location.');
+        if (sosActivated) {
+            Alert.alert('Error', 'SOS is already active.');
             return;
+        }
+
+        let currentLocation = location;
+
+        if (!currentLocation) {
+            setSosStatus('Getting your precise location...');
+            try {
+                // Ensure we have permissions first
+                let { status } = await Location.getForegroundPermissionsAsync();
+                if (status !== 'granted') {
+                    const response = await Location.requestForegroundPermissionsAsync();
+                    status = response.status;
+                }
+                
+                if (status !== 'granted') {
+                    Alert.alert('Permission Denied', 'Location permission is required to send your SOS. Please enable it in your device settings.');
+                    setSosStatus('');
+                    return;
+                }
+
+                // Try last known position for speed
+                currentLocation = await Location.getLastKnownPositionAsync({});
+                if (!currentLocation) {
+                    // Fallback to getting current position if last known is null
+                    currentLocation = await Location.getCurrentPositionAsync({
+                        accuracy: Location.Accuracy.Balanced
+                    });
+                }
+                setLocation(currentLocation);
+            } catch (error) {
+                console.error('Error getting emergency location:', error);
+                Alert.alert('Error', 'Cannot get your location. Please ensure location services are enabled.');
+                setSosStatus('');
+                return;
+            }
+        }
+
+        if (!currentLocation) {
+             Alert.alert('Error', 'Cannot get your location. Please ensure location services are enabled.');
+             return;
         }
 
         setSosActivated(true);
@@ -57,8 +97,8 @@ const SOSScreen = () => {
         try {
             const sosData = {
                 location: {
-                    latitude: location.coords.latitude,
-                    longitude: location.coords.longitude
+                    latitude: currentLocation.coords.latitude,
+                    longitude: currentLocation.coords.longitude
                 },
                 citizenId: 'user123', // Replace with actual user ID
                 timestamp: new Date().toISOString()

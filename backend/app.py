@@ -2,6 +2,7 @@ from flask import Flask, Response, render_template, redirect, url_for
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import cv2
 from ultralytics import YOLO
+from deepface import DeepFace
 import threading
 from flask import Flask, jsonify, request
 from pymongo import MongoClient
@@ -75,6 +76,7 @@ arms_classes = ["Gun", "Knife", "Pistol", "Handgun", "Rifle"]
 
 # Global variable to store detected objects
 detected_objects = []
+frame_counter = 0
 
 # Function to run inference on a frame
 def detect_objects(frame):
@@ -97,6 +99,36 @@ def detect_objects(frame):
             class_id = int(box.cls)
             if arms_classes[class_id] in arms_classes:
                 detected_objects.append(arms_classes[class_id])
+
+    # Check for criminals every 30 frames
+    global frame_counter
+    frame_counter += 1
+    if frame_counter % 30 == 0:
+        try:
+            # We save the frame temporarily to pass to DeepFace
+            temp_path = "temp_frame.jpg"
+            cv2.imwrite(temp_path, frame)
+            
+            # Find matching face
+            db_path = os.path.join(app.root_path, "static", "criminals")
+            # Only run if directory exists and has files
+            if os.path.exists(db_path) and len(os.listdir(db_path)) > 0:
+                dfs = DeepFace.find(img_path=temp_path, db_path=db_path, enforce_detection=False, silent=True)
+                if len(dfs) > 0 and not dfs[0].empty:
+                    # Identity contains the path to the matching image
+                    matched_path = dfs[0]['identity'].iloc[0]
+                    criminal_name = os.path.basename(matched_path).split('.')[0]
+                    
+                    # Prevent duplicate alerts in a short time
+                    detected_objects.append(f"Criminal Detected: {criminal_name}")
+                    
+                    # Emit alert to dashboard
+                    socketio.emit('criminal_detected', {
+                        'name': criminal_name,
+                        'message': f'Warning: Wanted criminal {criminal_name} detected on camera!'
+                    }, room='police')
+        except Exception as e:
+            print(f"Face recognition error: {e}")
 
     return detected_objects
 
@@ -520,6 +552,38 @@ def police_login():
 @app.route('/police/offender-database')
 def police_offender_database():
     return render_template("Police/offender-database.html")
+
+@app.route('/police/upload-criminal', methods=['POST'])
+def police_upload_criminal():
+    try:
+        if 'photo' not in request.files:
+            return jsonify({'status': 'error', 'message': 'No photo provided'}), 400
+            
+        file = request.files['photo']
+        name = request.form.get('name', 'Unknown')
+        
+        if file.filename == '':
+            return jsonify({'status': 'error', 'message': 'No selected file'}), 400
+            
+        if file:
+            # Clean name for filesystem
+            safe_name = "".join([c for c in name if c.isalpha() or c.isdigit() or c==' ']).rstrip()
+            ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'jpg'
+            
+            db_path = os.path.join(app.root_path, 'static', 'criminals')
+            os.makedirs(db_path, exist_ok=True)
+            
+            save_path = os.path.join(db_path, f'{safe_name}.{ext}')
+            file.save(save_path)
+            
+            # Since DeepFace caches embeddings in a pkl file, we remove the existing pkl cache
+            pkl_path = os.path.join(db_path, 'representations_vgg_face.pkl')
+            if os.path.exists(pkl_path):
+                os.remove(pkl_path)
+                
+            return jsonify({'status': 'success', 'message': 'Criminal added successfully'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/police/police-analytics')
 def police_analytics():

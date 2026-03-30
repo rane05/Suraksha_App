@@ -641,6 +641,54 @@ const databaseMenu = document.getElementById('databaseMenu');
             });
         </script>
         
-        
+        <!-- Global Criminal Alert Popup -->
+        <div id="criminalAlertPopup" class="fixed top-20 right-4 max-w-sm w-full bg-red-600 border border-red-700 rounded-lg shadow-2xl p-4 transform transition-all duration-300 translate-x-full opacity-0 z-50 flex items-start gap-3">
+            <div class="flex-shrink-0 bg-white rounded-full p-2 mt-1 shadow-inner">
+                <i class="fas fa-exclamation-triangle text-red-600 text-2xl"></i>
+            </div>
+            <div class="flex-1">
+                <h3 class="text-white font-bold text-lg mb-1" id="criminalAlertTitle">Criminal Detected!</h3>
+                <p class="text-red-100 text-sm font-medium" id="criminalAlertMessage"></p>
+                <div class="mt-3 flex gap-2">
+                    <button onclick="document.getElementById('criminalAlertPopup').classList.replace('translate-x-0', 'translate-x-full'); document.getElementById('criminalAlertPopup').classList.replace('opacity-100', 'opacity-0');" class="bg-red-700 hover:bg-red-800 text-white px-3 py-1 rounded text-sm transition-colors shadow">Dismiss</button>
+                    <a href="/police/cctv-feeds" class="bg-white hover:bg-red-50 text-red-700 px-3 py-1 rounded text-sm font-bold transition-colors shadow">View Camera</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Global Socket Connection for Criminal Detection -->
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                if (typeof io !== 'undefined') {
+                    // We only want one connection, we use a single global connection
+                    if (!window.globalSocket) {
+                        window.globalSocket = io();
+                        window.globalSocket.emit('join_police_room');
+                    }
+
+                    window.globalSocket.on('criminal_detected', function(data) {
+                        // Display the alert popup
+                        const popup = document.getElementById('criminalAlertPopup');
+                        document.getElementById('criminalAlertTitle').textContent = `CRIMINAL DETECTED: ${data.name || 'Unknown'}`;
+                        document.getElementById('criminalAlertMessage').textContent = data.message || 'A known criminal has been detected on the camera feed.';
+                        
+                        // Slide in animation
+                        popup.classList.replace('translate-x-full', 'translate-x-0');
+                        popup.classList.replace('opacity-0', 'opacity-100');
+
+                        // Optionally play a sound
+                        const alertSound = new Audio('https://freesound.org/data/previews/135/135805_2391696-lq.mp3');
+                        alertSound.play().catch(e => console.log('Audio disabled by browser', e));
+
+                        // Auto dismiss after 15 seconds
+                        setTimeout(() => {
+                            popup.classList.replace('translate-x-0', 'translate-x-full');
+                            popup.classList.replace('opacity-100', 'opacity-0');
+                        }, 15000);
+                    });
+                }
+            });
+        </script>
+
         </body>
         </html>
